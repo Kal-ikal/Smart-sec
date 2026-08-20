@@ -7,3 +7,5 @@ dist/
 .DS_Store
 supabase/.branches
 supabase/.temp
+# WhatsApp Web session
+apps/worker/.wwebjs_auth/

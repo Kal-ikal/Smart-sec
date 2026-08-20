@@ -1,98 +1,80 @@
-import fetch from "node-fetch";
-import { config } from "../config.js";
+import pkg from "whatsapp-web.js";
+import qrcode from "qrcode-terminal";
 
-export interface WhatsAppNotificationPayload {
-  targetUrl: string;
-  jobId: string;
-  totalFindings: number;
-  criticalCount: number;
-  highCount: number;
-  findings: Array<{
-    name: string;
-    severity: string | null;
-    score: number | null;
-    vector: string | null;
-    owaspCategory: string | null;
-  }>;
+const { Client, LocalAuth } = pkg;
+
+let isWaReady = false;
+
+// Inisialisasi WhatsApp Web Client dengan LocalAuth & qrcode-terminal
+export const waClient = new Client({
+  authStrategy: new LocalAuth(),
+  puppeteer: {
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  },
+});
+
+waClient.on("qr", (qr: string) => {
+  console.log("\n==================================================");
+  console.log("[WHATSAPP] 📱 Pindai QR Code berikut untuk otentikasi WhatsApp Worker:");
+  console.log("==================================================");
+  qrcode.generate(qr, { small: true });
+});
+
+waClient.on("ready", () => {
+  isWaReady = true;
+  console.log("\n[WHATSAPP] ✅ Sesi WhatsApp Web berhasil terhubung dan SIAP dikirim!");
+});
+
+waClient.on("auth_failure", (msg: string) => {
+  console.error("[WHATSAPP] ❌ Otentikasi Gagal:", msg);
+});
+
+waClient.on("disconnected", (reason: string) => {
+  isWaReady = false;
+  console.warn("[WHATSAPP] ⚠️ WhatsApp terputus:", reason);
+});
+
+// Mulai inisialisasi background whatsapp-web.js (non-blocking)
+try {
+  waClient.initialize().catch((err) => {
+    console.warn("[WHATSAPP] ⚠️ Gagal menginisialisasi WhatsApp Client:", err.message);
+  });
+} catch (err) {
+  console.warn("[WHATSAPP] ⚠️ Exception inisialisasi WhatsApp:", err);
 }
 
 /**
- * Klien Notifikasi WhatsApp untuk SMART-SEC.
- * Mengirimkan laporan alert instan ke WhatsApp Security Team / Peneliti VDP
- * ketika pemindaian selesai dan menemukan kerentanan berisiko Tinggi (High / Critical).
+ * Mengirimkan pesan peringatan darurat ke WhatsApp target
+ * ketika temuan berstatus Kritis (Critical) atau Tinggi (High) terdeteksi.
  */
-export const whatsappClient = {
-  async sendVulnerabilityAlert(payload: WhatsAppNotificationPayload): Promise<boolean> {
-    const { targetUrl, jobId, totalFindings, criticalCount, highCount, findings } = payload;
-
-    // Format pesan WhatsApp bergaya Executive Alert
-    const lines = [
-      "🚨 *[SMART-SEC ALERT] Laporan Pemindaian Massal*",
-      "========================================",
-      `🌐 *Target VDP*: ${targetUrl}`,
-      `📋 *Job ID*: \`${jobId.slice(0, 13)}\``,
-      `📊 *Total Temuan*: ${totalFindings} Kerentanan`,
-      `⚠️ *Ringkasan Risiko*: 🔴 ${criticalCount} Critical | 🟠 ${highCount} High`,
-      "========================================",
-      "",
-      "*Rincian Kerentanan Utama:*",
-    ];
-
-    findings.forEach((f, idx) => {
-      const icon = f.severity === "Critical" ? "🔴" : f.severity === "High" ? "🟠" : "🟡";
-      lines.push(`${idx + 1}. ${icon} *[${f.severity ?? "UNKNOWN"}] ${f.name}*`);
-      lines.push(`   • CVSS v4.0 Score: *${f.score ? f.score.toFixed(1) : "N/A"}* (${f.severity})`);
-      if (f.owaspCategory) {
-        lines.push(`   • OWASP: ${f.owaspCategory}`);
-      }
-      if (f.vector) {
-        lines.push(`   • Vector: \`${f.vector}\``);
-      }
-      lines.push("");
-    });
-
-    lines.push("----------------------------------------");
-    lines.push("ℹ️ *Informasi*: Skor CVSS v4.0 dihitung 100% di database PostgreSQL via Stored Procedure.");
-    lines.push("🔗 Silakan cek dashboard SMART-SEC untuk analisis dan rekomendasi remediasi.");
-
-    const messageText = lines.join("\n");
-
-    if (!config.whatsapp.enabled) {
-      console.log(`[WHATSAPP-SERVICE] (Disabled/Simulasi) Pesan Alert Notifikasi Disiapkan:`);
-      console.log("----------------------------------------");
-      console.log(messageText);
-      console.log("----------------------------------------");
-      console.log(`[WHATSAPP-SERVICE] Set WA_ENABLED=true, WA_API_TOKEN, dan WA_TARGET_PHONE di .env untuk mengirim ke WhatsApp nyata.`);
-      return true;
-    }
-
-    try {
-      console.log(`[WHATSAPP-SERVICE] Mengirimkan notifikasi WhatsApp ke ${config.whatsapp.targetPhone}...`);
-
-      // Mengirim POST request ke WhatsApp Gateway API (mis. Fonnte / Wablas / Generic HTTP API)
-      const response = await fetch(config.whatsapp.apiUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": config.whatsapp.apiToken,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          target: config.whatsapp.targetPhone,
-          message: messageText,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[WHATSAPP-SERVICE] Gagal mengirim pesan (${response.status}):`, errorText);
-        return false;
-      }
-
-      console.log(`[WHATSAPP-SERVICE] ✅ Notifikasi WhatsApp berhasil dikirim!`);
-      return true;
-    } catch (err) {
-      console.error(`[WHATSAPP-SERVICE] Exception saat mengirim WhatsApp:`, err);
+export async function kirimNotifikasiDarurat(nomorTujuan: string, pesan: string): Promise<boolean> {
+  try {
+    if (!nomorTujuan) {
+      console.warn("[WHATSAPP] ⚠️ Nomor tujuan WhatsApp belum dikonfigurasi (WA_TARGET_PHONE / nomorTujuan).");
       return false;
     }
-  },
-};
+
+    // Format nomor WhatsApp: mis. 08123456789 -> 628123456789@c.us
+    let formattedNumber = nomorTujuan.replace(/\D/g, "");
+    if (formattedNumber.startsWith("0")) {
+      formattedNumber = "62" + formattedNumber.slice(1);
+    }
+    const chatId = formattedNumber.endsWith("@c.us") ? formattedNumber : `${formattedNumber}@c.us`;
+
+    if (!isWaReady) {
+      console.log(`[WHATSAPP-SIMULATION] (Client belum Scan QR) Log Pesan Darurat ke ${chatId}:`);
+      console.log("----------------------------------------");
+      console.log(pesan);
+      console.log("----------------------------------------");
+      return false;
+    }
+
+    await waClient.sendMessage(chatId, pesan);
+    console.log(`[WHATSAPP] 🚨 Notifikasi darurat berhasil dikirim ke ${chatId}`);
+    return true;
+  } catch (err) {
+    console.error("[WHATSAPP] ❌ Gagal mengirim notifikasi darurat:", err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}

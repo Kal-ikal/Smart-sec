@@ -6,59 +6,78 @@ import { zapClient } from "./services/zapClient.js";
 let isShuttingDown = false;
 
 /**
- * External Background Worker -- proses Node.js mandiri untuk mass-scanning.
- * Menggunakan claim_next_scan_job() (SECURITY DEFINER, FOR UPDATE SKIP LOCKED)
- * untuk dequeue atomik bebas race condition.
+ * Loop polling asinkron berkelanjutan (pollJobs)
+ * Menarik pekerjaan dari antrean scan_jobs menggunakan klausa FOR UPDATE SKIP LOCKED
+ * via Stored Procedure claim_next_scan_job().
  */
-async function pollLoop() {
+async function pollJobs() {
   console.log("==================================================");
-  console.log(`[${config.workerId}] SMART-SEC Background Worker Initialized`);
-  console.log(`[${config.workerId}] Supabase URL: ${config.supabaseUrl}`);
-  console.log(`[${config.workerId}] ZAP API URL : ${config.zapApiUrl}`);
-  console.log(`[${config.workerId}] Rate Limit  : ${config.rateLimit.tokensPerSecond} req/s (Bucket: ${config.rateLimit.bucketCapacity})`);
-  console.log(`[${config.workerId}] WhatsApp Alert: ${config.whatsapp.enabled ? "ACTIVE (Target: " + config.whatsapp.targetPhone + ")" : "DISABLED (Console Simulation Mode)"}`);
+  console.log(`[WORKER] 🛡️ SMART-SEC External Background Worker Started`);
+  console.log(`[WORKER] Instance ID : ${config.workerId}`);
+  console.log(`[WORKER] Supabase URL: ${config.supabaseUrl}`);
+  console.log(`[WORKER] ZAP API URL : ${config.zapApiUrl}`);
+  console.log(`[WORKER] Rate Limit  : ${config.rateLimit.tokensPerSecond} req/s (Capacity: ${config.rateLimit.bucketCapacity})`);
   console.log("==================================================");
 
-  const zapOnline = await zapClient.checkConnection();
-  if (zapOnline) {
-    console.log(`[${config.workerId}] ✅ OWASP ZAP API daemon terhubung dan aktif.`);
-  } else {
-    console.warn(`[${config.workerId}] ⚠️ OWASP ZAP API belum terdeteksi di ${config.zapApiUrl}. Pastikan ZAP daemon/docker sudah running saat mengeksekusi scan.`);
+  // Cek konektivitas awal ke OWASP ZAP API Daemon
+  try {
+    const zapOnline = await zapClient.checkConnection();
+    if (zapOnline) {
+      console.log(`[WORKER] ✅ OWASP ZAP API Daemon terhubung.`);
+    } else {
+      console.warn(`[WORKER] ⚠️ OWASP ZAP API tidak terdeteksi di ${config.zapApiUrl}. Gunakan Docker/ZAP atau set ZAP_MOCK=true untuk simulasi.`);
+    }
+  } catch (err) {
+    console.warn(`[WORKER] ⚠️ Gagal memeriksa koneksi ZAP:`, err instanceof Error ? err.message : String(err));
   }
 
-  console.log(`[${config.workerId}] Memulai polling antrean scan_jobs...`);
+  console.log(`[WORKER] 🔄 Memulai polling antrean scan_jobs (Jeda backoff: 5 detik jika kosong)...\n`);
 
   while (!isShuttingDown) {
     try {
+      // 1. Panggil Stored Procedure claim_next_scan_job (FOR UPDATE SKIP LOCKED)
       const { data: claimedJobs, error } = await supabaseAdmin.rpc(
         "claim_next_scan_job",
         { p_worker_id: config.workerId }
       );
 
       if (error) {
-        console.error(`[${config.workerId}] Gagal claim job:`, error.message);
-        await sleep(config.pollIntervalMs);
+        console.error(`[WORKER] ❌ Gagal memanggil claim_next_scan_job:`, error.message);
+        await sleep(5000);
         continue;
       }
 
       const job = claimedJobs?.[0];
 
       if (!job) {
-        // Antrean kosong, tidur sejenak
-        await sleep(config.pollIntervalMs);
+        // Antrean kosong -- backoff 5 detik
+        await sleep(5000);
         continue;
       }
 
-      console.log(`[${config.workerId}] Berhasil mengklaim job ${job.id} (target: ${job.target_id})`);
+      console.log(`[WORKER] 📥 Klaim Job Berhasil! Job ID: ${job.id} (Target ID: ${job.target_id})`);
+
+      // 2. Ubah status scan_jobs menjadi 'processing'
+      const { error: updateStatusError } = await supabaseAdmin
+        .from("scan_jobs")
+        .update({ status: "running" }) // status 'running'/'processing'
+        .eq("id", job.id);
+
+      if (updateStatusError) {
+        console.warn(`[WORKER] ⚠️ Gagal memperbarui status ke processing: ${updateStatusError.message}`);
+      }
+
+      // 3. Eksekusi pemindaian & kalkulasi CVSS
       await processJob(job);
-      console.log(`[${config.workerId}] Selesai memproses job ${job.id}`);
+
     } catch (err) {
-      console.error(`[${config.workerId}] Exception dalam loop polling:`, err);
-      await sleep(config.pollIntervalMs);
+      // Resilience check: tangkap exception agar worker tidak crash fatal
+      console.error(`[WORKER] ⚠️ Terjadi kesalahan pada loop pollJobs (Unhandled exception caught):`, err instanceof Error ? err.message : String(err));
+      await sleep(5000);
     }
   }
 
-  console.log(`[${config.workerId}] Worker dihentikan dengan bersih.`);
+  console.log(`[WORKER] Worker dihentikan dengan aman.`);
 }
 
 function sleep(ms: number) {
@@ -67,16 +86,17 @@ function sleep(ms: number) {
 
 // Graceful shutdown handlers
 process.on("SIGINT", () => {
-  console.log(`\n[${config.workerId}] Menerima sinyal SIGINT. Menutup worker...`);
+  console.log(`\n[WORKER] Menerima sinyal SIGINT. Menghentikan polling...`);
   isShuttingDown = true;
 });
 
 process.on("SIGTERM", () => {
-  console.log(`\n[${config.workerId}] Menerima sinyal SIGTERM. Menutup worker...`);
+  console.log(`\n[WORKER] Menerima sinyal SIGTERM. Menghentikan polling...`);
   isShuttingDown = true;
 });
 
-pollLoop().catch((err) => {
-  console.error(`[${config.workerId}] Worker fatal crash:`, err);
+// Jalankan pollJobs
+pollJobs().catch((err) => {
+  console.error(`[WORKER] Fatal crash pada pollJobs:`, err);
   process.exit(1);
 });

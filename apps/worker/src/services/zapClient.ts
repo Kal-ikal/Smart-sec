@@ -25,10 +25,7 @@ function zapUrl(endpoint: string, params: Record<string, string> = {}) {
 }
 
 /**
- * Klien untuk OWASP ZAP REST API.
- * Worker hanya memicu spider + active scan dan polling status.
- * Data mentah diteruskan ke Supabase database, di mana Stored Procedure
- * mengeksekusi kalkulasi skor CVSS v4.0.
+ * Klien REST API OWASP ZAP untuk eksekusi Active Scan & Spidering.
  */
 export const zapClient = {
   async checkConnection(): Promise<boolean> {
@@ -43,39 +40,34 @@ export const zapClient = {
     }
   },
 
-  async startSpider(targetUrl: string): Promise<string> {
-    if (process.env.ZAP_MOCK === "true") {
-      console.log(`[ZAP-SIMULATOR] Memulai simulasi Spider untuk target: ${targetUrl}`);
-      return `mock-spider-${Date.now()}`;
-    }
-    const res = await fetch(zapUrl("/JSON/spider/action/scan/", { url: targetUrl }));
-    if (!res.ok) {
-      throw new Error(`ZAP Spider API error (${res.status}): ${await res.text()}`);
-    }
-    const json = (await res.json()) as { scan?: string; error?: string };
-    if (!json.scan) {
-      throw new Error(`ZAP Spider gagal diinisiasi: ${json.error ?? JSON.stringify(json)}`);
-    }
-    return json.scan;
-  },
-
-  async spiderStatus(scanId: string): Promise<number> {
-    if (process.env.ZAP_MOCK === "true") {
-      return 100;
-    }
-    const res = await fetch(zapUrl("/JSON/spider/view/status/", { scanId }));
-    if (!res.ok) {
-      throw new Error(`ZAP Spider Status error (${res.status}): ${await res.text()}`);
-    }
-    const json = (await res.json()) as { status: string };
-    return Number(json.status);
-  },
-
-  async startActiveScan(targetUrl: string): Promise<string> {
+  /**
+   * Eksekusi Active Scan pada peladen target via OWASP ZAP REST API.
+   */
+  async eksekusiActiveScan(targetUrl: string): Promise<string> {
     if (process.env.ZAP_MOCK === "true") {
       console.log(`[ZAP-SIMULATOR] Memulai simulasi Active Scan untuk target: ${targetUrl}`);
       return `mock-ascan-${Date.now()}`;
     }
+
+    // 1. Jalankan Spider terlebih dahulu
+    console.log(`[ZAP-CLIENT] Memulai Spider scan untuk target: ${targetUrl}`);
+    const spiderRes = await fetch(zapUrl("/JSON/spider/action/scan/", { url: targetUrl }));
+    if (!spiderRes.ok) {
+      throw new Error(`ZAP Spider API error (${spiderRes.status}): ${await spiderRes.text()}`);
+    }
+    const spiderJson = (await spiderRes.json()) as { scan?: string; error?: string };
+    if (!spiderJson.scan) {
+      throw new Error(`ZAP Spider gagal diinisiasi: ${spiderJson.error ?? JSON.stringify(spiderJson)}`);
+    }
+
+    await this.waitUntilComplete(async () => {
+      const res = await fetch(zapUrl("/JSON/spider/view/status/", { scanId: spiderJson.scan! }));
+      const json = (await res.json()) as { status: string };
+      return Number(json.status);
+    });
+
+    // 2. Jalankan Active Scan
+    console.log(`[ZAP-CLIENT] Memulai Active Scan untuk target: ${targetUrl}`);
     const res = await fetch(zapUrl("/JSON/ascan/action/scan/", { url: targetUrl }));
     if (!res.ok) {
       throw new Error(`ZAP Active Scan API error (${res.status}): ${await res.text()}`);
@@ -84,24 +76,20 @@ export const zapClient = {
     if (!json.scan) {
       throw new Error(`ZAP Active Scan gagal diinisiasi: ${json.error ?? JSON.stringify(json)}`);
     }
-    return json.scan;
-  },
 
-  async activeScanStatus(scanId: string): Promise<number> {
-    if (process.env.ZAP_MOCK === "true") {
-      return 100;
-    }
-    const res = await fetch(zapUrl("/JSON/ascan/view/status/", { scanId }));
-    if (!res.ok) {
-      throw new Error(`ZAP Active Scan Status error (${res.status}): ${await res.text()}`);
-    }
-    const json = (await res.json()) as { status: string };
-    return Number(json.status);
+    const activeScanId = json.scan;
+    await this.waitUntilComplete(async () => {
+      const statusRes = await fetch(zapUrl("/JSON/ascan/view/status/", { scanId: activeScanId }));
+      const statusJson = (await statusRes.json()) as { status: string };
+      return Number(statusJson.status);
+    });
+
+    return activeScanId;
   },
 
   async getAlerts(targetUrl: string): Promise<ZapAlert[]> {
     if (process.env.ZAP_MOCK === "true") {
-      console.log(`[ZAP-SIMULATOR] Menghasilkan simulasi temuan kerentanan untuk: ${targetUrl}`);
+      console.log(`[ZAP-SIMULATOR] Menghasilkan temuan simulasi untuk: ${targetUrl}`);
       return [
         {
           pluginId: "40018",
@@ -133,16 +121,6 @@ export const zapClient = {
           evidence: "http://169.254.169.254/latest/meta-data/",
           cweid: "918",
         },
-        {
-          pluginId: "10038",
-          alertRef: "10038-1",
-          name: "Content Security Policy (CSP) Header Not Set",
-          description: "Header respons HTTP Content-Security-Policy tidak ditemukan pada server.",
-          solution: "Konfigurasikan header Content-Security-Policy pada server web.",
-          risk: "Low",
-          evidence: "Missing Header",
-          cweid: "693",
-        },
       ];
     }
     const res = await fetch(zapUrl("/JSON/core/view/alerts/", { baseurl: targetUrl }));
@@ -153,11 +131,13 @@ export const zapClient = {
     return json.alerts ?? [];
   },
 
-  /** Polling helper generik dengan jeda tetap sampai status = 100. */
   async waitUntilComplete(
     checkStatus: () => Promise<number>,
     intervalMs = 3000
   ): Promise<void> {
+    if (process.env.ZAP_MOCK === "true") {
+      return;
+    }
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const status = await checkStatus();
