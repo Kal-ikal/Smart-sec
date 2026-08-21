@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient, getPublicOwnerId } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
  * GET /api/targets
  */
 export async function GET() {
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
 
   const { data, error } = await supabase
     .from("scan_targets")
@@ -25,39 +25,14 @@ export async function GET() {
  * POST /api/targets
  */
 export async function POST(request: Request) {
-  const supabase = createSupabaseServerClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let userId = user?.id;
-
-  if (!userId) {
-    // Fallback untuk single-tenant / local dev profile
-    const { data: firstProfile } = await supabase
-      .from("profiles")
-      .select("id")
-      .limit(1)
-      .maybeSingle();
-
-    if (firstProfile) {
-      userId = firstProfile.id;
-    }
-  }
-
-  if (!userId) {
-    return NextResponse.json(
-      { error: "Sesi pengguna tidak ditemukan. Pastikan ada user/profil terdaftar di Supabase." },
-      { status: 401 }
-    );
-  }
+  const supabase = createSupabaseAdminClient();
+  const ownerId = await getPublicOwnerId(supabase);
 
   try {
     const body = await request.json();
     const { url, program_name, is_authorized, notes } = body;
 
-    if (!url || typeof url !== "string") {
+    if (!url || typeof url !== "string" || !url.trim()) {
       return NextResponse.json({ error: "URL target wajib diisi" }, { status: 400 });
     }
 
@@ -66,14 +41,33 @@ export async function POST(request: Request) {
       formattedUrl = `https://${formattedUrl}`;
     }
 
+    try {
+      new URL(formattedUrl);
+    } catch {
+      return NextResponse.json({ error: "Format URL target tidak valid" }, { status: 400 });
+    }
+
+    const { data: existingTarget } = await supabase
+      .from("scan_targets")
+      .select("*")
+      .eq("url", formattedUrl)
+      .maybeSingle();
+
+    if (existingTarget) {
+      return NextResponse.json(
+        { target: existingTarget, message: "Target sudah terdaftar sebelumnya" },
+        { status: 200 }
+      );
+    }
+
     const { data, error } = await supabase
       .from("scan_targets")
       .insert({
-        owner_id: userId,
+        owner_id: ownerId,
         url: formattedUrl,
-        program_name: program_name ?? null,
-        is_authorized: Boolean(is_authorized),
-        notes: notes ?? null,
+        program_name: program_name ? String(program_name).trim() : "Public Scope VDP",
+        is_authorized: is_authorized !== undefined ? Boolean(is_authorized) : true,
+        notes: notes ? String(notes).trim() : "Submitted via Public Interface",
       })
       .select()
       .single();
@@ -85,7 +79,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ target: data }, { status: 201 });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Invalid payload" },
+      { error: err instanceof Error ? err.message : "Payload tidak valid" },
       { status: 400 }
     );
   }

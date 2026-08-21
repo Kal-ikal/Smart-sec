@@ -1,80 +1,64 @@
-import pkg from "whatsapp-web.js";
-import qrcode from "qrcode-terminal";
-
-const { Client, LocalAuth } = pkg;
-
-let isWaReady = false;
-
-// Inisialisasi WhatsApp Web Client dengan LocalAuth & qrcode-terminal
-export const waClient = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: {
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  },
-});
-
-waClient.on("qr", (qr: string) => {
-  console.log("\n==================================================");
-  console.log("[WHATSAPP] 📱 Pindai QR Code berikut untuk otentikasi WhatsApp Worker:");
-  console.log("==================================================");
-  qrcode.generate(qr, { small: true });
-});
-
-waClient.on("ready", () => {
-  isWaReady = true;
-  console.log("\n[WHATSAPP] ✅ Sesi WhatsApp Web berhasil terhubung dan SIAP dikirim!");
-});
-
-waClient.on("auth_failure", (msg: string) => {
-  console.error("[WHATSAPP] ❌ Otentikasi Gagal:", msg);
-});
-
-waClient.on("disconnected", (reason: string) => {
-  isWaReady = false;
-  console.warn("[WHATSAPP] ⚠️ WhatsApp terputus:", reason);
-});
-
-// Mulai inisialisasi background whatsapp-web.js (non-blocking)
-try {
-  waClient.initialize().catch((err) => {
-    console.warn("[WHATSAPP] ⚠️ Gagal menginisialisasi WhatsApp Client:", err.message);
-  });
-} catch (err) {
-  console.warn("[WHATSAPP] ⚠️ Exception inisialisasi WhatsApp:", err);
-}
+import fetch from "node-fetch";
+import { config } from "../config.js";
 
 /**
- * Mengirimkan pesan peringatan darurat ke WhatsApp target
- * ketika temuan berstatus Kritis (Critical) atau Tinggi (High) terdeteksi.
+ * Klien Integrasi WhatsApp Gateway (Fonnte API)
+ * Mengirimkan notifikasi darurat/alert kerentanan berisiko Kritis atau Tinggi.
  */
-export async function kirimNotifikasiDarurat(nomorTujuan: string, pesan: string): Promise<boolean> {
-  try {
-    if (!nomorTujuan) {
-      console.warn("[WHATSAPP] ⚠️ Nomor tujuan WhatsApp belum dikonfigurasi (WA_TARGET_PHONE / nomorTujuan).");
-      return false;
-    }
+export async function kirimNotifikasiDarurat(
+  nomorTujuan?: string,
+  pesan?: string
+): Promise<boolean> {
+  const targetPhone = nomorTujuan || config.whatsapp.targetPhone || process.env.WA_TARGET_PHONE || "";
+  const messageText = pesan || "Pesan pengujian notifikasi darurat SMART-SEC";
+  const apiToken = config.whatsapp.apiToken || process.env.WA_API_TOKEN || "";
+  const apiUrl = config.whatsapp.apiUrl || process.env.WA_API_URL || "https://api.fonnte.com/send";
 
-    // Format nomor WhatsApp: mis. 08123456789 -> 628123456789@c.us
-    let formattedNumber = nomorTujuan.replace(/\D/g, "");
-    if (formattedNumber.startsWith("0")) {
-      formattedNumber = "62" + formattedNumber.slice(1);
-    }
-    const chatId = formattedNumber.endsWith("@c.us") ? formattedNumber : `${formattedNumber}@c.us`;
+  if (!targetPhone) {
+    console.warn("[WHATSAPP-FONNTE] ⚠️ WA_TARGET_PHONE / nomorTujuan belum diatur.");
+    return false;
+  }
 
-    if (!isWaReady) {
-      console.log(`[WHATSAPP-SIMULATION] (Client belum Scan QR) Log Pesan Darurat ke ${chatId}:`);
-      console.log("----------------------------------------");
-      console.log(pesan);
-      console.log("----------------------------------------");
-      return false;
-    }
-
-    await waClient.sendMessage(chatId, pesan);
-    console.log(`[WHATSAPP] 🚨 Notifikasi darurat berhasil dikirim ke ${chatId}`);
+  // Jika token Fonnte belum dikonfigurasi (placeholder), tampilkan simulasi log terminal dengan rapi
+  if (!apiToken || apiToken === "your-fonnte-token-here") {
+    console.log(`\n==================================================`);
+    console.log(`[WHATSAPP-FONNTE SIMULASI] Log Pesan Notifikasi Darurat:`);
+    console.log(`Penerima : ${targetPhone}`);
+    console.log(`Endpoint : ${apiUrl}`);
+    console.log("----------------------------------------");
+    console.log(messageText);
+    console.log("----------------------------------------");
+    console.log(`ℹ️ Masukkan token Fonnte yang valid ke WA_API_TOKEN pada file .env untuk mengirim pesan ke nomor WhatsApp asli.`);
+    console.log(`==================================================\n`);
     return true;
+  }
+
+  try {
+    console.log(`[WHATSAPP-FONNTE] Mengirimkan notifikasi darurat POST ke ${apiUrl}...`);
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": apiToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target: targetPhone,
+        message: messageText,
+      }),
+    });
+
+    const data = (await response.json()) as { status?: boolean; reason?: string; detail?: string };
+
+    if (response.ok && data.status !== false) {
+      console.log(`[WHATSAPP-FONNTE] ✅ Notifikasi WhatsApp berhasil dikirim ke ${targetPhone}!`);
+      return true;
+    } else {
+      console.error(`[WHATSAPP-FONNTE] ❌ Gagal mengirim pesan ke WhatsApp (${response.status}):`, data.reason || data.detail || JSON.stringify(data));
+      return false;
+    }
   } catch (err) {
-    console.error("[WHATSAPP] ❌ Gagal mengirim notifikasi darurat:", err instanceof Error ? err.message : String(err));
+    console.error(`[WHATSAPP-FONNTE] ❌ Exception saat mengirim pesan via Fonnte:`, err instanceof Error ? err.message : String(err));
     return false;
   }
 }
