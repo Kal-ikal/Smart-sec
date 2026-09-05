@@ -1,4 +1,5 @@
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import StatsOverview from "./StatsOverview";
 import TargetManager from "./TargetManager";
 import RealtimeJobs from "./RealtimeJobs";
@@ -8,12 +9,21 @@ import ScanReportView from "./ScanReportView";
 export const dynamic = "force-dynamic";
 
 /**
- * Server Component Dashboard SMART-SEC Release Edition.
- * Mengambil data awal (targets, jobs, findings) secara publik (tanpa login),
- * serta menghubungkan komponen realtime WebSocket untuk pembaruan instan.
+ * Server Component Dashboard SMART-SEC.
+ * Mengambil data awal (targets, jobs, findings) memakai klien yang tunduk
+ * pada sesi auth pengguna + RLS (owner_id = auth.uid()) -- setiap pengguna
+ * hanya melihat baris miliknya sendiri, sesuai 0002_rls_policies.sql.
  */
 export default async function DashboardPage() {
-  const supabase = createSupabaseAdminClient();
+  const supabase = createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
 
   const [targetsRes, jobsRes, findingsRes] = await Promise.all([
     supabase
@@ -63,8 +73,16 @@ export default async function DashboardPage() {
           <div className="flex items-center gap-3 self-end sm:self-auto">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs text-slate-300 font-medium">
               <span className="w-2 h-2 rounded-full bg-emerald-400 live-pulse"></span>
-              <span>Public Scanning Utility</span>
+              <span>{user.email}</span>
             </div>
+            <form action="/auth/signout" method="post">
+              <button
+                type="submit"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-900/90 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                Keluar
+              </button>
+            </form>
           </div>
         </div>
       </header>
@@ -87,7 +105,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* VirusTotal-Style Security Scan Report View (Release Edition) */}
+        {/* Ringkasan Laporan Hasil Pemindaian per Target/Job */}
         <ScanReportView targets={targets} jobs={jobs} findings={findings} />
       </main>
 

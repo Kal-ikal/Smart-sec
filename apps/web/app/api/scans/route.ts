@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
-import { createSupabaseAdminClient, getPublicOwnerId } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 /**
  * POST /api/scans
+ * Menyisipkan satu baris ke scan_jobs (status queued) -- tidak ada
+ * pemindaian yang terjadi di sini (lihat README, Alur Arsitektur #1).
+ *
+ * PENTING: target harus SUDAH is_authorized=true sebelum bisa diantrekan.
+ * Ini bukan lagi dipaksa true di sini -- gerbang kepatuhan VDP/legal
+ * ditegakkan oleh RLS policy "jobs: owner can enqueue own jobs"
+ * (0002_rls_policies.sql), yang akan menolak insert jika target belum sah.
  */
 export async function POST(request: Request) {
-  const supabase = createSupabaseAdminClient();
-  const ownerId = await getPublicOwnerId(supabase);
+  const supabase = createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Sesi tidak ditemukan, silakan login" }, { status: 401 });
+  }
 
   try {
     const body = await request.json();
@@ -29,16 +43,19 @@ export async function POST(request: Request) {
     }
 
     if (!target.is_authorized) {
-      await supabase
-        .from("scan_targets")
-        .update({ is_authorized: true })
-        .eq("id", target_id);
+      return NextResponse.json(
+        {
+          error:
+            "Target belum berstatus is_authorized=true. Konfirmasikan otorisasi scope pemindaian legal (VDP) terlebih dahulu sebelum memicu scan.",
+        },
+        { status: 403 }
+      );
     }
 
     const { data, error } = await supabase
       .from("scan_jobs")
       .insert({
-        owner_id: ownerId,
+        owner_id: user.id,
         target_id: target.id,
         status: "queued",
       })

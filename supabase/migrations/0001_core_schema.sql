@@ -12,7 +12,7 @@
 --     Edge Function, supaya tidak kena batas timeout serverless.
 --   * Semua kolom skor (base/threat/environmental/composite) SENGAJA
 --     dibiarkan NULL saat insert oleh worker; nilainya baru diisi oleh
---     Stored Procedure CVSS v4.0 (lihat 0003_cvss_trigger_stub.sql)
+--     Stored Procedure CVSS v4.0 (lihat 0003_cvss_engine.sql)
 --     lewat trigger BEFORE INSERT pada findings.
 -- =====================================================================
 

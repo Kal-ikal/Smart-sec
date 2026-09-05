@@ -9,7 +9,7 @@
  *
  * Modul ini TIDAK PERNAH menghitung skor numerik (Base/Threat/Env/Composite).
  * Kalkulasi skor numerik dieksekusi 100% oleh PostgreSQL Stored Procedure & Trigger
- * di database (0003_cvss_trigger_stub.sql / calculate_cvss_v4).
+ * di database (0003_cvss_engine.sql / calculate_cvss_v4).
  */
 
 export interface MappedVulnerabilityMetadata {

@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server";
-import { createSupabaseAdminClient, getPublicOwnerId } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/targets
+ * Menggunakan klien bersesi (anon key + cookie) sehingga RLS
+ * ("targets: owner full access") membatasi hasil hanya milik pengguna login.
  */
 export async function GET() {
-  const supabase = createSupabaseAdminClient();
+  const supabase = createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Sesi tidak ditemukan, silakan login" }, { status: 401 });
+  }
 
   const { data, error } = await supabase
     .from("scan_targets")
@@ -23,10 +33,22 @@ export async function GET() {
 
 /**
  * POST /api/targets
+ * is_authorized HARUS ditegaskan eksplisit oleh pengguna (checkbox
+ * "Konfirmasi Otorisasi Scope Pemindaian Legal") -- default false. Ini
+ * adalah gerbang kepatuhan VDP/legal (Batasan Masalah, UU ITE) yang
+ * dipakai lagi oleh RLS di scan_jobs (0002_rls_policies.sql) sebelum
+ * target boleh diikutkan dalam antrean pemindaian.
  */
 export async function POST(request: Request) {
-  const supabase = createSupabaseAdminClient();
-  const ownerId = await getPublicOwnerId(supabase);
+  const supabase = createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Sesi tidak ditemukan, silakan login" }, { status: 401 });
+  }
 
   try {
     const body = await request.json();
@@ -63,11 +85,11 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("scan_targets")
       .insert({
-        owner_id: ownerId,
+        owner_id: user.id,
         url: formattedUrl,
-        program_name: program_name ? String(program_name).trim() : "Public Scope VDP",
-        is_authorized: is_authorized !== undefined ? Boolean(is_authorized) : true,
-        notes: notes ? String(notes).trim() : "Submitted via Public Interface",
+        program_name: program_name ? String(program_name).trim() : null,
+        is_authorized: Boolean(is_authorized),
+        notes: notes ? String(notes).trim() : null,
       })
       .select()
       .single();
