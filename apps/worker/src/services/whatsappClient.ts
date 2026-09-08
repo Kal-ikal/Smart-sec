@@ -19,6 +19,11 @@ export async function kirimNotifikasiDarurat(
     return false;
   }
 
+  if (!config.whatsapp.enabled) {
+    console.log(`[WHATSAPP-FONNTE] ℹ️ WA_ENABLED=false -- notifikasi WhatsApp dinonaktifkan, alert dilewati (set WA_ENABLED=true di .env untuk mengaktifkan).`);
+    return false;
+  }
+
   // Jika token Fonnte belum dikonfigurasi (placeholder), tampilkan simulasi log terminal dengan rapi
   if (!apiToken || apiToken === "your-fonnte-token-here") {
     console.log(`\n==================================================`);
