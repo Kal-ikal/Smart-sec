@@ -19,7 +19,8 @@ smart-sec/
     └── migrations/
         ├── 0001_core_schema.sql          # profiles, scan_targets, scan_jobs, findings
         ├── 0002_rls_policies.sql         # RLS + fungsi claim_next_scan_job()
-        └── 0003_cvss_engine.sql          # Stored Procedure + trigger CVSS v4.0 (implementasi penuh)
+        ├── 0003_cvss_engine.sql          # Stored Procedure + trigger CVSS v4.0 (implementasi penuh)
+        └── 0004_cvss_overrides.sql       # Penilaian kontekstual analis (Threat/Environmental Metrics)
 ```
 
 ## Alur Arsitektur (Decoupled)
@@ -88,4 +89,9 @@ npm run dev:worker      # mulai polling antrean
       (`apps/worker/src/services/cvssVectorMapper.ts`): CWE-ID dari alert
       ZAP dicocokkan ke tabel aturan CWE→OWASP, dengan fallback heuristik
       berbasis kata kunci nama alert untuk CWE yang belum terdaftar
+- [x] Penilaian kontekstual analis (Threat Metrics/Exploit Maturity,
+      Environmental Metrics/Security Requirements) lewat RPC
+      `submit_cvss_assessment()` (`0004_cvss_overrides.sql`) — override
+      digabung dengan `cvss_vector` mentah hanya di database, trigger
+      menghitung ulang skor otomatis
 - [ ] Laporan/ekspor hasil audit (PDF/CSV)
