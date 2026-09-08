@@ -16,6 +16,38 @@ export default function RealtimeFindings({ initialFindings = [] }: RealtimeFindi
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedFindingId, setExpandedFindingId] = useState<string | null>(null);
   const [copiedVectorId, setCopiedVectorId] = useState<string | null>(null);
+  const [assessmentE, setAssessmentE] = useState("X");
+  const [assessmentCR, setAssessmentCR] = useState("X");
+  const [assessmentIR, setAssessmentIR] = useState("X");
+  const [assessmentAR, setAssessmentAR] = useState("X");
+  const [submittingAssessment, setSubmittingAssessment] = useState(false);
+  const [assessmentMessage, setAssessmentMessage] = useState<string | null>(null);
+
+  const handleSubmitAssessment = async (findingId: string) => {
+    setSubmittingAssessment(true);
+    setAssessmentMessage(null);
+
+    const overrides: Record<string, string> = {};
+    if (assessmentE !== "X") overrides.E = assessmentE;
+    if (assessmentCR !== "X") overrides.CR = assessmentCR;
+    if (assessmentIR !== "X") overrides.IR = assessmentIR;
+    if (assessmentAR !== "X") overrides.AR = assessmentAR;
+
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.rpc("submit_cvss_assessment", {
+      p_finding_id: findingId,
+      p_overrides: overrides,
+    });
+
+    setSubmittingAssessment(false);
+
+    if (error) {
+      setAssessmentMessage(`Gagal: ${error.message}`);
+      return;
+    }
+
+    setAssessmentMessage("Penilaian tersimpan, skor dihitung ulang otomatis oleh trigger database.");
+  };
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -239,6 +271,59 @@ export default function RealtimeFindings({ initialFindings = [] }: RealtimeFindi
                         <p className="text-[10px] text-rose-400">Final Composite</p>
                         <p className="text-lg font-bold text-rose-400 mt-0.5">{f.cvss_composite_score ?? "0.0"}</p>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Penilaian Kontekstual Analis (Threat & Environmental Metrics) */}
+                  <div>
+                    <h4 className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 mb-2">
+                      Penilaian Kontekstual (Threat &amp; Environmental Metrics)
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-1">Exploit Maturity (E)</label>
+                        <select
+                          value={assessmentE}
+                          onChange={(e) => setAssessmentE(e.target.value)}
+                          className="w-full px-2 py-1.5 text-[11px] rounded-lg bg-slate-950 border border-slate-800 text-white"
+                        >
+                          <option value="X">Tidak dinilai (X)</option>
+                          <option value="A">Attacked (A)</option>
+                          <option value="P">Proof-of-Concept (P)</option>
+                          <option value="U">Unreported (U)</option>
+                        </select>
+                      </div>
+                      {[
+                        { label: "Confidentiality Req. (CR)", value: assessmentCR, setValue: setAssessmentCR },
+                        { label: "Integrity Req. (IR)", value: assessmentIR, setValue: setAssessmentIR },
+                        { label: "Availability Req. (AR)", value: assessmentAR, setValue: setAssessmentAR },
+                      ].map((field) => (
+                        <div key={field.label}>
+                          <label className="block text-[10px] text-slate-500 mb-1">{field.label}</label>
+                          <select
+                            value={field.value}
+                            onChange={(e) => field.setValue(e.target.value)}
+                            className="w-full px-2 py-1.5 text-[11px] rounded-lg bg-slate-950 border border-slate-800 text-white"
+                          >
+                            <option value="X">Tidak dinilai (X)</option>
+                            <option value="H">High (H)</option>
+                            <option value="M">Medium (M)</option>
+                            <option value="L">Low (L)</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <button
+                        onClick={() => handleSubmitAssessment(f.id)}
+                        disabled={submittingAssessment}
+                        className="px-3 py-1.5 text-[11px] font-semibold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg transition-colors"
+                      >
+                        {submittingAssessment ? "Menyimpan..." : "Terapkan Penilaian"}
+                      </button>
+                      {assessmentMessage && (
+                        <span className="text-[11px] text-slate-400">{assessmentMessage}</span>
+                      )}
                     </div>
                   </div>
 

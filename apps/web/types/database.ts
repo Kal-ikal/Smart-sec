@@ -28,6 +28,7 @@ export type Database = {
           cvss_base_score: number | null;
           cvss_composite_score: number | null;
           cvss_environmental_score: number | null;
+          cvss_overrides: Json | null;
           cvss_severity: CvssSeverity | null;
           cvss_threat_score: number | null;
           cvss_vector: string | null;
@@ -50,6 +51,7 @@ export type Database = {
           cvss_base_score?: number | null;
           cvss_composite_score?: number | null;
           cvss_environmental_score?: number | null;
+          cvss_overrides?: Json | null;
           cvss_severity?: CvssSeverity | null;
           cvss_threat_score?: number | null;
           cvss_vector?: string | null;
@@ -72,6 +74,7 @@ export type Database = {
           cvss_base_score?: number | null;
           cvss_composite_score?: number | null;
           cvss_environmental_score?: number | null;
+          cvss_overrides?: Json | null;
           cvss_severity?: CvssSeverity | null;
           cvss_threat_score?: number | null;
           cvss_vector?: string | null;
@@ -228,6 +231,7 @@ export type Database = {
       calculate_cvss_v4: {
         Args: {
           p_vector: string;
+          p_overrides?: Json;
         };
         Returns: {
           base_score: number;
@@ -236,6 +240,13 @@ export type Database = {
           severity: CvssSeverity;
           threat_score: number;
         }[];
+      };
+      submit_cvss_assessment: {
+        Args: {
+          p_finding_id: string;
+          p_overrides: Json;
+        };
+        Returns: Database["public"]["Tables"]["findings"]["Row"];
       };
       claim_next_scan_job: {
         Args: {
