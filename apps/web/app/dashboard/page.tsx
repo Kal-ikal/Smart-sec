@@ -98,7 +98,7 @@ export default async function DashboardPage() {
         {/* Grid Antrean Realtime & Stream Temuan Kerentanan */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
-            <RealtimeJobs initialJobs={jobs} />
+            <RealtimeJobs initialJobs={jobs} initialTargets={targets} />
           </div>
           <div className="lg:col-span-2">
             <RealtimeFindings initialFindings={findings} />

@@ -5,13 +5,21 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Database } from "@/types/database";
 
 type ScanJob = Database["public"]["Tables"]["scan_jobs"]["Row"];
+type ScanTarget = Database["public"]["Tables"]["scan_targets"]["Row"];
 
 interface RealtimeJobsProps {
   initialJobs: ScanJob[];
+  initialTargets: ScanTarget[];
 }
 
-export default function RealtimeJobs({ initialJobs }: RealtimeJobsProps) {
+export default function RealtimeJobs({ initialJobs, initialTargets }: RealtimeJobsProps) {
   const [jobs, setJobs] = useState<ScanJob[]>(initialJobs);
+  // target_id -> url, dipakai untuk menampilkan URL asli di kartu job alih-alih
+  // UUID mentah -- payload realtime scan_jobs cuma berisi target_id, bukan hasil
+  // join, jadi peta ini juga ikut disinkronkan lewat langganan scan_targets.
+  const [targetMap, setTargetMap] = useState<Map<string, string>>(
+    () => new Map(initialTargets.map((t) => [t.id, t.url]))
+  );
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -29,6 +37,16 @@ export default function RealtimeJobs({ initialJobs }: RealtimeJobsProps) {
             setJobs((prev) =>
               prev.map((j) => (j.id === updated.id ? updated : j))
             );
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "scan_targets" },
+        (payload) => {
+          if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const t = payload.new as ScanTarget;
+            setTargetMap((prev) => new Map(prev).set(t.id, t.url));
           }
         }
       )
@@ -110,7 +128,7 @@ export default function RealtimeJobs({ initialJobs }: RealtimeJobsProps) {
                 {getStatusBadge(j.status)}
               </div>
               <p className="text-[11px] text-slate-400">
-                Target ID: <span className="font-mono text-slate-300">{j.target_id.slice(0, 8)}...</span>
+                Target: <span className="font-mono text-slate-300">{targetMap.get(j.target_id) ?? `${j.target_id.slice(0, 8)}...`}</span>
                 {j.claimed_by && (
                   <> &middot; Diproses oleh: <span className="text-slate-300 font-mono">{j.claimed_by}</span></>
                 )}
