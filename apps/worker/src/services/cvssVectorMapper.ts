@@ -116,6 +116,19 @@ const CWE_RULES: Record<number, CweMappingRule> = {
     vc: "L", vi: "N", va: "N",
     sc: "N", si: "N", sa: "N",
   },
+  // Open Redirect / URL Redirection to Untrusted Site -- membutuhkan
+  // korban mengklik tautan hasil rekayasa (UI:A), dan dampaknya terbatas
+  // pada manipulasi kepercayaan (phishing) via redirect target yang
+  // dikendalikan penyerang, BUKAN kompromi langsung terhadap
+  // confidentiality/availability sistem yang rentan -- sesuai pemetaan
+  // resmi OWASP, CWE-601 masuk A01:2021-Broken Access Control, bukan
+  // A05 (default fallback heuristik sebelum rule ini ditambahkan).
+  601: {
+    owaspCategory: "A01:2021-Broken Access Control",
+    av: "N", ac: "L", at: "N", pr: "N", ui: "A",
+    vc: "N", vi: "L", va: "N",
+    sc: "N", si: "N", sa: "N",
+  },
   // Cryptographic Failures / Insecure Transport (mis. header keamanan
   // transport belum di-set) -- dampak konfidensialitas dinilai Low, bukan
   // High: absennya header seperti HSTS adalah kelemahan defense-in-depth
