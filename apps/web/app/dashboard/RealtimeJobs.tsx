@@ -117,9 +117,9 @@ export default function RealtimeJobs({ initialJobs, initialTargets }: RealtimeJo
         </span>
       </div>
 
-      <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 bg-slate-950/50 overflow-hidden">
+      <div className="divide-y divide-slate-800/60 rounded-lg border border-slate-800/80 bg-slate-950/50 overflow-hidden stagger-children">
         {jobs.map((j) => (
-          <div key={j.id} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
+          <div key={j.id} className="animate-in p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-900/40 transition-colors">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-slate-300 font-medium">

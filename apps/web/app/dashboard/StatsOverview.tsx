@@ -26,9 +26,9 @@ export default function StatsOverview({ targets, jobs, findings }: StatsOverview
     : "0.0";
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
       {/* Total Targets Card */}
-      <div className="glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80">
+      <div className="animate-in glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80 transition-transform hover:-translate-y-0.5">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Target VDP Terdaftar</p>
           <p className="text-2xl font-bold text-white mt-1">{targets.length}</p>
@@ -45,7 +45,7 @@ export default function StatsOverview({ targets, jobs, findings }: StatsOverview
       </div>
 
       {/* Active Jobs Card */}
-      <div className="glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80">
+      <div className="animate-in glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80 transition-transform hover:-translate-y-0.5">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Status Antrean Scan</p>
           <p className="text-2xl font-bold text-white mt-1">{activeJobsCount}</p>
@@ -62,7 +62,7 @@ export default function StatsOverview({ targets, jobs, findings }: StatsOverview
       </div>
 
       {/* Critical & High Findings Card */}
-      <div className="glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80">
+      <div className="animate-in glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80 transition-transform hover:-translate-y-0.5">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Critical & High Risk</p>
           <p className="text-2xl font-bold text-rose-400 mt-1">{criticalCount + highCount}</p>
@@ -78,7 +78,7 @@ export default function StatsOverview({ targets, jobs, findings }: StatsOverview
       </div>
 
       {/* Mean CVSS Score Card */}
-      <div className="glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80">
+      <div className="animate-in glass-panel p-5 rounded-xl flex items-center justify-between border-slate-800/80 transition-transform hover:-translate-y-0.5">
         <div>
           <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Rata-rata Skor CVSS v4.0</p>
           <p className="text-2xl font-bold text-amber-400 mt-1">{avgScore}</p>

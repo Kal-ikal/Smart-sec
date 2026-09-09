@@ -53,3 +53,53 @@
 .live-pulse {
   animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Entrance animation for cards/list items (findings, jobs, targets) --
+   pure CSS, no JS animation library, keeps the bundle light. */
+@keyframes fade-slide-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-in {
+  animation: fade-slide-in 0.28s ease-out both;
+}
+
+/* Stagger the first N siblings so a freshly-rendered list doesn't pop in
+   all at once -- cheap (CSS-only) and capped so a huge list (1000+ real
+   findings) doesn't accumulate absurd total delay. */
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 30ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 90ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(n+7) { animation-delay: 170ms; }
+
+/* Smooth expand/collapse for detail panels -- animating grid-template-rows
+   (rather than height:auto, which cannot be transitioned, or max-height,
+   which either clips or forces a large fixed value) keeps this cheap:
+   only two elements participate in the transition, no JS measurement. */
+.expand-region {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.expand-region.is-open {
+  grid-template-rows: 1fr;
+}
+
+.expand-region > div {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .live-pulse {
+    animation: none !important;
+  }
+  .expand-region {
+    transition: none !important;
+  }
+}
