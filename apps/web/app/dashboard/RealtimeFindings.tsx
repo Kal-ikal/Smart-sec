@@ -211,7 +211,17 @@ export default function RealtimeFindings({ initialFindings = [] }: RealtimeFindi
               className="rounded-xl border border-slate-800/80 bg-slate-950/60 overflow-hidden transition-all hover:border-slate-700/80"
             >
               <div
-                onClick={() => setExpandedFindingId(isExpanded ? null : f.id)}
+                onClick={() => {
+                  setExpandedFindingId(isExpanded ? null : f.id);
+                  // Reset form penilaian setiap ganti finding -- mencegah
+                  // pilihan E/CR/IR/AR dari finding sebelumnya ikut ter-submit
+                  // ke finding yang baru dibuka.
+                  setAssessmentE("X");
+                  setAssessmentCR("X");
+                  setAssessmentIR("X");
+                  setAssessmentAR("X");
+                  setAssessmentMessage(null);
+                }}
                 className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-slate-900/30 transition-colors"
               >
                 <div className="space-y-1">
