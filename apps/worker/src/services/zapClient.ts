@@ -25,6 +25,21 @@ function zapUrl(endpoint: string, params: Record<string, string> = {}) {
 }
 
 /**
+ * ZAP mencatat node root sebuah domain di Sites Tree dengan trailing slash
+ * (mis. "http://host.com/"). Memanggil Active Scan dengan URL domain polos
+ * (tanpa slash) gagal dengan "url_not_found: URL Not Found in the Scan Tree"
+ * meskipun Spider pada domain yang sama berhasil -- normalisasi di sini
+ * memastikan Spider dan Active Scan selalu memakai bentuk URL yang identik.
+ */
+function normalizeTargetUrl(targetUrl: string): string {
+  const parsed = new URL(targetUrl);
+  if (parsed.pathname === "") {
+    parsed.pathname = "/";
+  }
+  return parsed.toString();
+}
+
+/**
  * Klien REST API OWASP ZAP untuk eksekusi Active Scan & Spidering.
  */
 export const zapClient = {
@@ -48,6 +63,8 @@ export const zapClient = {
       console.log(`[ZAP-SIMULATOR] Memulai simulasi Active Scan untuk target: ${targetUrl}`);
       return `mock-ascan-${Date.now()}`;
     }
+
+    targetUrl = normalizeTargetUrl(targetUrl);
 
     // 1. Jalankan Spider terlebih dahulu
     console.log(`[ZAP-CLIENT] Memulai Spider scan untuk target: ${targetUrl}`);
@@ -123,7 +140,7 @@ export const zapClient = {
         },
       ];
     }
-    const res = await fetch(zapUrl("/JSON/core/view/alerts/", { baseurl: targetUrl }));
+    const res = await fetch(zapUrl("/JSON/core/view/alerts/", { baseurl: normalizeTargetUrl(targetUrl) }));
     if (!res.ok) {
       throw new Error(`ZAP Get Alerts error (${res.status}): ${await res.text()}`);
     }
