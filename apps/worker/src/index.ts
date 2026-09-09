@@ -31,6 +31,29 @@ async function pollJobs() {
     console.warn(`[WORKER] ⚠️ Gagal memeriksa koneksi ZAP:`, err instanceof Error ? err.message : String(err));
   }
 
+  // Reklamasi job "zombie": jika instance worker ini sebelumnya mati/di-restart
+  // (Ctrl+C, crash) saat sedang memproses job, baris itu macet permanen di
+  // status running/claimed karena tidak ada proses lagi yang akan
+  // menandainya selesai/gagal. Worker_id sama (default statis per config)
+  // berarti aman diasumsikan job lama milik instance sebelumnya, bukan
+  // instance lain yang masih benar-benar berjalan.
+  const { data: reclaimedJobs, error: reclaimError } = await supabaseAdmin
+    .from("scan_jobs")
+    .update({
+      status: "failed",
+      error_message: "Job ditandai gagal otomatis -- worker instance sebelumnya berhenti (restart/crash) saat job ini masih berjalan.",
+      finished_at: new Date().toISOString(),
+    })
+    .eq("claimed_by", config.workerId)
+    .in("status", ["claimed", "running"])
+    .select("id");
+
+  if (reclaimError) {
+    console.warn(`[WORKER] ⚠️ Gagal membersihkan job zombie: ${reclaimError.message}`);
+  } else if (reclaimedJobs && reclaimedJobs.length > 0) {
+    console.log(`[WORKER] 🧹 Membersihkan ${reclaimedJobs.length} job zombie dari instance sebelumnya (ditandai failed).`);
+  }
+
   console.log(`[WORKER] 🔄 Memulai polling antrean scan_jobs (Jeda backoff: 5 detik jika kosong)...\n`);
 
   while (!isShuttingDown) {
