@@ -35,8 +35,9 @@ export default function TargetManager({ initialTargets, onScanTriggered }: Targe
 
     try {
       const parsed = new URL(formatted);
-      if (!parsed.hostname || !parsed.hostname.includes(".")) {
-        return { formatted, isValid: false, error: "Nama domain/hostname tidak valid (contoh: target-vdp.com)" };
+      const isLocalHostname = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+      if (!parsed.hostname || (!parsed.hostname.includes(".") && !isLocalHostname)) {
+        return { formatted, isValid: false, error: "Nama domain/hostname tidak valid (contoh: target-vdp.com atau localhost:3000 untuk target lokal)" };
       }
       return { formatted, isValid: true };
     } catch {
