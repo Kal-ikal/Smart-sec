@@ -19,6 +19,7 @@ export const config = {
   supabaseServiceRoleKey: requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
   zapApiUrl: process.env.ZAP_API_URL ?? "http://127.0.0.1:8080",
   zapApiKey: process.env.ZAP_API_KEY ?? "skripsi123",
+  zapMaxScanDurationMins: Number(process.env.ZAP_MAX_SCAN_DURATION_MINS ?? 5),
   workerId: process.env.WORKER_ID ?? `worker-${process.pid}`,
   rateLimit: {
     tokensPerSecond: Number(process.env.RATE_LIMIT_TOKENS_PER_SECOND ?? 2),

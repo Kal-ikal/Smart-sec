@@ -58,9 +58,22 @@ export const zapClient = {
       await fetch(zapUrl("/JSON/spider/action/setOptionThreadCount/", { Integer: "10" }));
       await fetch(zapUrl("/JSON/ascan/action/setOptionThreadPerHost/", { Integer: "10" }));
       await fetch(zapUrl("/JSON/ascan/action/setOptionDelayInMs/", { Integer: "0" }));
-      console.log(`[ZAP-CLIENT] ⚡ Paralelisme ZAP dinaikkan (10 thread) untuk mempercepat scan.`);
+      // Batasi kedalaman/lebar Spider -- mencegah crawl tak terkendali ke
+      // seluruh sub-halaman situs besar (mis. Firing Range punya 18+
+      // kategori uji terpisah); Active Scan tetap menguji setiap URL yang
+      // ditemukan secara menyeluruh, hanya jumlah URL yang dibatasi.
+      await fetch(zapUrl("/JSON/spider/action/setOptionMaxDepth/", { Integer: "3" }));
+      await fetch(zapUrl("/JSON/spider/action/setOptionMaxChildren/", { Integer: "10" }));
+      // Batas waktu keras per Active Scan -- ZAP otomatis menghentikan diri
+      // setelah durasi ini meski belum 100% tuntas, mencegah satu job
+      // menyandera antrean tanpa batas waktu (praktik lazim: time-boxed
+      // security scan pada pipeline CI/CD).
+      await fetch(zapUrl("/JSON/ascan/action/setOptionMaxScanDurationInMins/", {
+        Integer: String(config.zapMaxScanDurationMins),
+      }));
+      console.log(`[ZAP-CLIENT] ⚡ Paralelisme dinaikkan, spider dibatasi, durasi maksimal Active Scan ${config.zapMaxScanDurationMins} menit.`);
     } catch (err) {
-      console.warn(`[ZAP-CLIENT] ⚠️ Gagal menaikkan paralelisme ZAP (non-fatal):`, err instanceof Error ? err.message : String(err));
+      console.warn(`[ZAP-CLIENT] ⚠️ Gagal menerapkan pengaturan kecepatan ZAP (non-fatal):`, err instanceof Error ? err.message : String(err));
     }
   },
 
