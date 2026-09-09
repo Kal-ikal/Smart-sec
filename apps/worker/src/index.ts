@@ -24,6 +24,7 @@ async function pollJobs() {
     const zapOnline = await zapClient.checkConnection();
     if (zapOnline) {
       console.log(`[WORKER] ✅ OWASP ZAP API Daemon terhubung.`);
+      await zapClient.optimizeForSpeed();
     } else {
       console.warn(`[WORKER] ⚠️ OWASP ZAP API tidak terdeteksi di ${config.zapApiUrl}. Gunakan Docker/ZAP atau set ZAP_MOCK=true untuk simulasi.`);
     }

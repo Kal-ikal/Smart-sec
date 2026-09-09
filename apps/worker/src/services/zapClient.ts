@@ -43,6 +43,27 @@ function normalizeTargetUrl(targetUrl: string): string {
  * Klien REST API OWASP ZAP untuk eksekusi Active Scan & Spidering.
  */
 export const zapClient = {
+  /**
+   * Menaikkan paralelisme internal ZAP (jumlah thread spider & active
+   * scan per host, delay antar-request di sisi ZAP dinolkan) -- ini
+   * TIDAK mengurangi jumlah payload/kedalaman uji yang dijalankan ZAP,
+   * hanya mempercepat berapa banyak yang dijalankan bersamaan. Rate
+   * limiting etis terhadap target tetap sepenuhnya dijaga oleh Token
+   * Bucket pada worker (lihat jobProcessor.ts), bukan oleh pengaturan
+   * ini -- keduanya independen.
+   */
+  async optimizeForSpeed(): Promise<void> {
+    if (process.env.ZAP_MOCK === "true") return;
+    try {
+      await fetch(zapUrl("/JSON/spider/action/setOptionThreadCount/", { Integer: "10" }));
+      await fetch(zapUrl("/JSON/ascan/action/setOptionThreadPerHost/", { Integer: "10" }));
+      await fetch(zapUrl("/JSON/ascan/action/setOptionDelayInMs/", { Integer: "0" }));
+      console.log(`[ZAP-CLIENT] ⚡ Paralelisme ZAP dinaikkan (10 thread) untuk mempercepat scan.`);
+    } catch (err) {
+      console.warn(`[ZAP-CLIENT] ⚠️ Gagal menaikkan paralelisme ZAP (non-fatal):`, err instanceof Error ? err.message : String(err));
+    }
+  },
+
   async checkConnection(): Promise<boolean> {
     if (process.env.ZAP_MOCK === "true") {
       return true;
