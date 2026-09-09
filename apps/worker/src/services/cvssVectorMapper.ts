@@ -116,11 +116,16 @@ const CWE_RULES: Record<number, CweMappingRule> = {
     vc: "L", vi: "N", va: "N",
     sc: "N", si: "N", sa: "N",
   },
-  // Cryptographic Failures / Insecure Transport
+  // Cryptographic Failures / Insecure Transport (mis. header keamanan
+  // transport belum di-set) -- dampak konfidensialitas dinilai Low, bukan
+  // High: absennya header seperti HSTS adalah kelemahan defense-in-depth
+  // yang MEMUNGKINKAN downgrade attack pada skenario tertentu, bukan
+  // eksposur data langsung yang terkonfirmasi -- konsisten dengan Risk
+  // rating "Low" yang diberikan ZAP sendiri untuk kategori alert ini.
   319: {
     owaspCategory: "A02:2021-Cryptographic Failures",
     av: "N", ac: "L", at: "N", pr: "N", ui: "N",
-    vc: "H", vi: "N", va: "N",
+    vc: "L", vi: "N", va: "N",
     sc: "N", si: "N", sa: "N",
   },
   327: {
